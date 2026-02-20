@@ -69,42 +69,41 @@ def build_preview_html(name: str, html_template: str, scss_styles: str) -> str:
 
     # Convert rgba(#hex, alpha) → rgba(r,g,b,alpha) for browser compatibility
     def hex_to_rgba(m: re.Match) -> str:
-        hex_color = m.group(1).lstrip("#")
-        alpha     = m.group(2)
-        if len(hex_color) == 3:
-            hex_color = "".join(c * 2 for c in hex_color)
-        r = int(hex_color[0:2], 16)
-        g = int(hex_color[2:4], 16)
-        b = int(hex_color[4:6], 16)
-        return f"rgba({r},{g},{b},{alpha})"
+        try:
+            hex_color = m.group(1).lstrip("#")
+            alpha     = m.group(2).strip()
+            if len(hex_color) == 3:
+                hex_color = "".join(c * 2 for c in hex_color)
+            r = int(hex_color[0:2], 16)
+            g = int(hex_color[2:4], 16)
+            b = int(hex_color[4:6], 16)
+            return f"rgba({r},{g},{b},{alpha})"
+        except:
+            return m.group(0) # Fallback to original match if conversion fails
 
     css = re.sub(r"rgba\(#([0-9a-fA-F]{3,6}),\s*([^)]+)\)", hex_to_rgba, css)
 
     # Remove SCSS nesting ampersand shortcuts not valid in plain CSS
     css = re.sub(r"&:", ":", css)
 
+
     # ── Strip Angular template syntax from HTML ────────────────────────────────
     html = html_template
 
-    # Remove structural directives: *ngIf, *ngFor, @if, @for, @switch, @case
+    # Remove remaining structural directives: *ngIf, @if, etc.
     html = re.sub(r'\s*\*ngIf="[^"]*"', "", html)
-    html = re.sub(r'\s*\*ngFor="[^"]*"', "", html)
     html = re.sub(r'@if\s*\([^)]*\)\s*\{', "", html)
     html = re.sub(r'@for\s*\([^)]*\)\s*\{', "", html)
     html = re.sub(r'@empty\s*\{', "", html)
-    html = re.sub(r'@switch\s*\([^)]*\)\s*\{', "", html)
-    html = re.sub(r'@case\s*\([^)]*\)\s*\{', "", html)
-    html = re.sub(r'@default\s*\{', "", html)
-    html = re.sub(r'\}', "", html)  # closing braces from @-blocks
+    html = re.sub(r'\}', "", html)
 
-    # Strip two-way bindings, event bindings, property bindings
-    html = re.sub(r'\s*\[\(ngModel\)\]="[^"]*"', "", html)
-    html = re.sub(r'\s*\(ngSubmit\)="[^"]*"', "", html)
-    html = re.sub(r'\s*\([a-zA-Z]+\)="[^"]*"', "", html)
-    html = re.sub(r'\s*\[[a-zA-Z]+\]="[^"]*"', "", html)
-
-    # Strip Angular interpolation {{ expr }} — leave placeholder text
-    html = re.sub(r"\{\{[^}]*\}\}", "…", html)
+    # Heuristic for Mock Data: If we see common *ngFor patterns, repeat the item for visual scale
+    if "*ngFor" in html_template:
+        def repeat_element(m: re.Match) -> str:
+            element_content = m.group(0)
+            cleaned = re.sub(r'\s*\*ngFor="[^"]*"', "", element_content)
+            return cleaned * 4 # Repeat 4 times for a rich UI feel
+        html = re.sub(r'<([a-z0-9-]+)[^>]*\*ngFor="[^"]*"[^>]*>.*?</\1>', repeat_element, html, flags=re.DOTALL)
 
     # ── Assemble final preview page ───────────────────────────────────────────
     return f"""<!DOCTYPE html>
@@ -191,16 +190,40 @@ def build_preview_html(name: str, html_template: str, scss_styles: str) -> str:
     }}
   </style>
 </head>
-<body>
-  <div class="preview-banner">
-    <span class="dot"></span>
-    AngularHelp Preview &mdash; <strong style="color:#f8fafc">{name}</strong>
-    &nbsp;&bull;&nbsp; Design system tokens applied &nbsp;&bull;&nbsp; Angular syntax stripped
-  </div>
-
   <div class="preview-area">
     {html}
   </div>
+
+  <script>
+    // CLIENT SIDE MOCKING: Fill in {{ braces }} with pattern-based dummy data
+    document.addEventListener("DOMContentLoaded", () => {{
+      const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+      let node;
+      const replacements = {{
+        'label': 'Premium Option',
+        'icon': '✨',
+        'text': 'Sample Content',
+        'title': 'Premium Component',
+        'name': 'User Name',
+        'amt': '$1,250.00',
+        'date': 'Oct 24, 2024'
+      }};
+
+      while(node = walk.nextNode()) {{
+        if (node.textContent.includes('{{{{')) {{
+          node.textContent = node.textContent.replace(/{{{{[^}}]*}}}}/g, (match) => {{
+
+            const key = match.toLowerCase();
+            for (const [k, v] of Object.entries(replacements)) {{
+              if (key.includes(k)) return v;
+            }}
+            return "Sample Data";
+          }});
+        }}
+      }}
+    }});
+  </script>
+
 </body>
 </html>
 """
@@ -285,3 +308,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

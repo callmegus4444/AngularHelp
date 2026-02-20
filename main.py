@@ -83,8 +83,9 @@ def run() -> None:
     print("╚══════════════════════════════════════════════════════╝")
     print()
     print("Describe an Angular component to generate it.")
-    print("Commands:  'new' — start fresh session | 'exit' — quit")
+    print("Commands:  'new' — start fresh | 'exit' — quit | 'python preview.py <name>' — view")
     print()
+
 
     request: ComponentRequest | None = None
     history: list[dict] = []

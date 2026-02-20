@@ -1,176 +1,130 @@
-# AngularHelp
+# AngularHelp — AI-Powered Angular Component Generator
 
-An AI-powered Angular component generator built with **LangGraph** and **Groq** (`openai/gpt-oss-120b`). Transforms natural language descriptions into valid, styled Angular components that strictly follow a predefined design system.
-
-Features a **2-layer validator** (regex + LLM critic), a **self-correction loop** (up to 2 retries), and an instant **browser preview** tool — no Angular CLI needed.
+> Describe any UI component. AngularHelp generates production-quality Angular code instantly using LangGraph + Groq.
 
 ---
 
-## Agentic Loop Architecture
+## What It Does
 
-```
-User Prompt
-    │
-    ▼
-┌─────────────┐
-│  generator  │◄──────────────────────┐
-│   (node)    │                       │
-└──────┬──────┘                       │
-       │ Angular Component JSON        │
-       ▼                              │
-┌─────────────┐    errors remain      │
-│  validator  │──── & retries left ──►│
-│   (node)    │                       │
-└──────┬──────┘                       │
-       │ passed / max retries reached  │
-       ▼                              │
-┌─────────────┐                  ┌────┴────────┐
-│  finalizer  │                  │  corrector  │
-│   (node)    │                  │   (node)    │
-└──────┬──────┘                  └─────────────┘
-       │
-       ▼
-  Files on disk
-```
-
-### Node Descriptions
-
-| Node | Responsibility |
-|---|---|
-| **generator** | Calls the LLM with the user prompt (plus previous error context on retries) to produce a JSON object containing the Angular TypeScript, HTML, and SCSS files. |
-| **validator** | Runs two layers of checks: (1) deterministic regex/rule checks — unauthorized colors, missing `@Component`, missing `standalone: true`, SCSS brace balance, HTML tag mismatches; (2) if layer 1 passes, a secondary LLM critic call performs a semantic review against the design system. |
-| **corrector** | If validation fails and retries remain, passes the error list back to the generator node for a corrective re-run with the errors injected into the prompt. |
-| **finalizer** | Writes the three component files to disk under `generated_project/components/{component-name}/` and marks the request as `DONE`. |
-
-`MAX_RETRIES` is set to `2` in `agent/graph.py`. If all retries are exhausted the best available output is written to disk with a warning.
-
----
-
-## Design System
-
-Design tokens and Tailwind class mappings live in `agent/design_system.json`. All generated components must use **only** the colors, border radii, fonts, and shadows defined there. The validator enforces this automatically on every generation.
-
-| Token | Value |
-|---|---|
-| primary-color | `#6366f1` |
-| primary-hover | `#4f46e5` |
-| accent-color | `#06b6d4` |
-| error-color | `#ef4444` |
-| success-color | `#22c55e` |
-| background | `#0f172a` |
-| surface | `#1e293b` |
-| text-primary | `#f8fafc` |
-| text-secondary | `#94a3b8` |
-
----
-
-## Multi-Turn Editing
-
-The CLI supports follow-up prompts within the same session. After a component is generated you can say things like:
-
-- *"now make the button rounded"*
-- *"add a loading spinner"*
-- *"change the background to the surface color"*
-
-The previous component context is automatically passed back to the LLM. Type `new` to start a fresh session.
+AngularHelp is an agentic pipeline that:
+1. Takes a natural-language description of an Angular component
+2. Generates TypeScript, HTML, and SCSS using GPT / Groq LLMs via LangGraph
+3. Validates the output against a strict design system
+4. Lets you view syntax-highlighted code **and** a live preview — all in a beautiful web UI
 
 ---
 
 ## Project Structure
 
 ```
-coder-buddy-main/
+AngularHelp/
+├── main.py                        # Original CLI entry point
+├── preview.py                     # Standalone HTML preview builder
+├── pyproject.toml                 # Dependencies
 ├── agent/
-│   ├── design_system.json     # Design tokens & Tailwind class mappings
-│   ├── graph.py               # LangGraph pipeline (generator→validator→corrector→finalizer)
-│   ├── prompts.py             # LLM prompt factories
-│   ├── states.py              # Pydantic models (AngularComponent, ComponentRequest)
-│   └── tools.py               # write_file, read_file, list_files helpers
-├── generated_project/
-│   ├── components/            # Generated Angular component source files
-│   │   └── {component-name}/
-│   │       ├── {name}.component.ts
-│   │       ├── {name}.component.html
-│   │       └── {name}.component.scss
-│   └── previews/              # Standalone browser-ready preview HTML files
-│       └── {name}.preview.html
-├── main.py                    # Interactive CLI entry point
-├── preview.py                 # Browser preview generator
-└── pyproject.toml
+│   ├── graph.py                   # LangGraph pipeline
+│   ├── states.py                  # Pydantic state models
+│   ├── prompts.py                 # LLM prompt factories
+│   ├── tools.py                   # Agent tools
+│   └── design_system.json         # Design tokens (colors, typography)
+├── frontend/
+│   ├── index.html                 # 3-panel web UI
+│   ├── styles.css                 # Dark glassmorphism theme
+│   ├── app.js                     # Client-side logic + session memory
+│   └── api/
+│       ├── server.py              # FastAPI bridge to LangGraph agent
+│       └── session_store.py       # In-memory session & chat memory
+└── generated_project/
+    ├── components/                # Generated Angular component files
+    └── previews/                  # Generated HTML preview pages
 ```
 
 ---
 
+## Web UI (Recommended)
+
+### Start the server
+
+```powershell
+cd AngularHelp
+pip install fastapi "uvicorn[standard]" python-multipart
+python -m uvicorn frontend.api.server:app --reload --port 8000
+```
+
+Open **http://localhost:8000** in your browser.
+
+### How the UI works
+
+| Panel | What it does |
+|-------|-------------|
+| **Center Hero** | Type what you want to build → press Enter |
+| **Code Tab** | Syntax-highlighted TypeScript / HTML / SCSS with copy button |
+| **Preview Tab** | Live iframe rendering the generated component |
+| **Right Chat Panel** | Full build history; type follow-up prompts to iterate |
+
+**Memory:** Every browser tab gets a UUID session. The server maintains full conversation history per session — every follow-up prompt has complete context. Click **New Session** in the nav to reset.
+
 ---
 
-## Previewing Generated Components
+## CLI Usage (Alternative)
 
-After generating a component with `python main.py`, instantly preview it in the browser:
-
-```bash
-# Open a component preview in the default browser
-python preview.py login-card
-
-# List all components available to preview
-python preview.py
-
-# Build the preview HTML without auto-opening the browser
-python preview.py login-card --no-open
-```
-
-Preview files are saved to `generated_project/previews/` as standalone `.html` files — double-click any of them in File Explorer to view offline.
-
-> [!NOTE]
-> The preview script injects the **Tailwind CDN**, converts SCSS variables to plain CSS, and strips Angular-specific template syntax (`*ngIf`, `[(ngModel)]`, `{{ }}`), so the visual layout renders faithfully in any browser without Angular CLI.
-
----
-
-## Setup
-
-Make sure you have `uv` installed. Then:
-
-```bash
-uv venv
-# Windows
-.venv\Scripts\activate
-# macOS/Linux
-source .venv/bin/activate
-
-uv pip install -r pyproject.toml
-```
-
-Create a `.env` file and add:
-
-```
-GROQ_API_KEY=your_groq_api_key_here
-```
-
-Start the application:
-
-```bash
+```powershell
 python main.py
 ```
 
----
-
-## Example Prompts
-
-- A login card with a glassmorphism effect
-- A dashboard stats widget with 4 metric cards
-- A signup form with email, password, and validation error states
-- A navigation sidebar with icons and active state highlighting
-- A modal dialog for confirming a delete action
-- A data table component with sortable columns and pagination
+Commands inside the REPL:
+- `<description>` — Generate an Angular component
+- `new` — Start a fresh session
+- `exit` — Quit
 
 ---
 
-## Assumptions
+## Prerequisites
 
-> [!NOTE]
-> Tailwind CSS is assumed to be pre-configured in the target Angular project environment. The generator outputs Tailwind utility classes but does not scaffold a full Angular workspace. Copy the generated files from `generated_project/components/` into your existing Angular project.
+- Python 3.11+
+- A `.env` file with your API key:
+
+```env
+GROQ_API_KEY=your_key_here
+```
+
+Install dependencies:
+
+```powershell
+pip install -r requirements.txt
+# or using uv:
+uv sync
+```
 
 ---
 
-## Legacy Pipeline
+## Design System
 
-The original **Coder Buddy** planner → architect → coder pipeline is still available in `agent/graph.py` as the compiled `agent` object for full backward compatibility.
+All components are constrained to a strict design system defined in `agent/design_system.json`:
+
+| Token | Value |
+|-------|-------|
+| `primary-color` | `#6366f1` (Indigo) |
+| `surface` | `#1e293b` |
+| `bg` | `#0f172a` |
+| `accent` | `#06b6d4` (Cyan) |
+
+Components use **Tailwind CSS** utility classes and **Inter** font.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| LLM Orchestration | LangGraph + LangChain |
+| LLM Provider | Groq (`openai/gpt-oss-120b`) |
+| Backend API | FastAPI + Uvicorn |
+| Frontend | Vanilla HTML / CSS / JS |
+| Validation | Pydantic v2 |
+
+---
+
+## License
+
+MIT

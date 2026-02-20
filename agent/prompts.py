@@ -22,93 +22,56 @@ def load_design_system() -> dict:
 
 def angular_generator_prompt(
     user_prompt: str,
-    conversation_history: list = None,
-    previous_errors: list = None,
-) -> list:
-    """
-    Builds the full message list for the Angular component generator LLM call.
-
-    Args:
-        user_prompt:          What the user wants to build.
-        conversation_history: Previous turns (list of role/content dicts) for
-                              multi-turn session continuity.
-        previous_errors:      Validation errors from the previous attempt so the
-                              LLM knows exactly what to fix on this retry.
-
-    Returns:
-        A list of message dicts ready for llm.invoke().
-    """
+    conversation_history: list[dict] | None = None,
+    previous_errors: list[str] | None = None,
+) -> list[dict]:
     ds = load_design_system()
-    tokens_json  = json.dumps(ds["tokens"], indent=2)
+    tokens_json = json.dumps(ds["tokens"], indent=2)
     tailwind_json = json.dumps(ds["tailwind_classes"], indent=2)
 
-    # Build the error-correction block only when retrying
     error_section = ""
     if previous_errors:
         error_lines = "\n".join(f"- {e}" for e in previous_errors)
-        error_section = f"""
-PREVIOUS VALIDATION ERRORS — you MUST fix ALL of these before responding:
-{error_lines}
-"""
+        error_section = f"\n\nCRITICAL FIX REQUIRED (PREVIOUS FAILURE):\n{error_lines}"
 
-    system_content = f"""You are an expert Angular component developer. Adhere to every rule below absolutely.
+    system_content = f"""You are a High-End Angular Code Architect.
 
-OUTPUT FORMAT:
-  Respond ONLY with a valid JSON object.
-  No markdown, no explanation, no code fences.
+GOAL: Build a premium component that follows the user's prompt while obeying the Design System.
 
-DESIGN SYSTEM:
-  Use ONLY the colors and tokens defined below. No other colors are permitted.
+STRICT OUTPUT RULES:
+1. Respond with ONLY a single JSON object. No markdown. No text. 
+2. FORMAT: {{"component_name": "...", "typescript_code": "...", "html_template": "...", "scss_styles": "..."}}
+3. PROPERLY ESCAPE newlines and quotes inside code strings.
 
-FRAMEWORK:
-  Generate Angular 17+ standalone components using Tailwind CSS utility classes.
-  Do NOT use Angular Material — Tailwind only.
-
-REQUIRED JSON KEYS (exactly these four, no others):
-  component_name   — PascalCase name, e.g. "LoginCardComponent"
-  typescript_code  — Full .component.ts file content
-  html_template    — Full .component.html file content
-  scss_styles      — Full .component.scss file content
-
-───────────────────────────────────────────
-DESIGN TOKENS (only these hex values allowed):
+DESIGN SYSTEM (STRICT GOVERNANCE):
+Use ONLY these hex colors for background, text, borders, and buttons:
 {tokens_json}
 
-TAILWIND CLASS MAPPINGS (prefer these exact classes):
+Preferred Tailwind utility classes:
 {tailwind_json}
-───────────────────────────────────────────
 
-ANGULAR COMPONENT RULES:
-  TypeScript:
-    - Decorator: @Component with standalone: true, selector, and templateUrl / styleUrls
-    - Import CommonModule in the imports array
-    - Use proper TypeScript typing throughout
+VISUAL EXCELLENCE GUIDELINES (LOVABLE/BOLT.NEW QUALITY):
+- Spacing: Use generous padding (p-6 to p-12) and margins. No cramped layouts.
+- Depth: Use 'shadow-[0_8px_32px_rgba(0,0,0,0.3)]' and 'backdrop-blur-md' for a layered feel.
+- Typography: Use font-['Inter'] for everything. Headers should be text-xl or 2xl.
+- Corners: Use 'rounded-[16px]' for large containers and 'rounded-[8px]' for buttons.
+- Hover: Always add 'transition-all duration-300 hover:scale-[1.02]' to interactive elements.
+- Layout: If multi-item (like payment cards), use a grid or flex-col with gap-4.
 
-  HTML:
-    - Use Tailwind utility classes for all layout and spacing
-    - Reference design-token colors via their exact hex values when inline styles are needed
-    - Avoid unclosed tags — every opened tag must be properly closed
+ANGULAR RULES:
+- Standalone components (v17+).
+- Use `CommonModule` for directives like `*ngIf` or `*ngFor`.
+- If no color is specified by user, default to 'primary-color' (#6366f1) or 'surface' (#1e293b).
 
-  SCSS:
-    - Minimal: prefer Tailwind classes; only add SCSS for complex animations or glassmorphism
-    - Glassmorphism effect (use when relevant):
-        backdrop-filter: blur(10px);
-        background: rgba(30, 41, 59, 0.7);
-    - All color values in SCSS must match a design-token hex value exactly
-    - Ensure all braces are balanced (every {{ must have a matching }})
 {error_section}"""
 
     messages: list[dict] = [{"role": "system", "content": system_content}]
-
     if conversation_history:
         messages.extend(conversation_history)
-
-    messages.append({
-        "role": "user",
-        "content": f"Generate an Angular component for: {user_prompt}",
-    })
-
+    
+    messages.append({"role": "user", "content": f"Generate a premium component for: {user_prompt}"})
     return messages
+
 
 
 def validator_prompt(component: dict, design_system: dict) -> str:

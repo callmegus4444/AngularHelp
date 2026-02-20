@@ -49,12 +49,42 @@ def _load_design_system() -> dict:
 # Node: generator
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _robust_json_parse(raw: str) -> dict:
+    """
+    Attempts to extract and parse a JSON object from a potentially messy string.
+    - Finds the first { and last }
+    - Strips common unescaped control characters
+    - Handles markdown blocks
+    """
+    text = raw.strip()
+    
+    # Extract content between first { and last } if present
+    start = text.find('{')
+    end = text.rfind('}')
+    if start != -1 and end != -1:
+        text = text[start:end+1]
+        
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        # Fallback: strip markdown artifacts and try again
+        cleaned = re.sub(r'```[a-z]*', '', text).strip()
+        data = json.loads(cleaned)
+
+    # Post-processing: If the LLM output contained escaped quotes (e.g. \"),
+    # we want to ensure they are cleaned up in the final strings.
+    if isinstance(data, dict):
+        for key in ["typescript_code", "html_template", "scss_styles"]:
+            if key in data and isinstance(data[key], str):
+                # Replace literal \" with " if the LLM double-escaped
+                data[key] = data[key].replace('\\"', '"')
+    return data
+
+
 def generator_node(state: dict) -> dict:
     """
     Calls the LLM to produce a JSON object containing the Angular component's
     TypeScript, HTML, and SCSS files.
-    On retries, injects the previous validation errors into the prompt so the
-    model knows exactly what to fix.
     """
     request: ComponentRequest = state["request"]
 
@@ -75,33 +105,36 @@ def generator_node(state: dict) -> dict:
     response = llm.invoke(messages)
     raw = response.content.strip()
 
-    # Strip markdown code fences that some models add despite instructions
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
+    # Default name fallback
+    fallback_name = "GeneratedComponent"
+    if request.user_prompt:
+        # Try to derive a name from the prompt
+        match = re.search(r'([a-zA-Z0-9]+)', request.user_prompt)
+        if match:
+            fallback_name = match.group(0).capitalize() + "Component"
 
     try:
-        data = json.loads(raw)
+        data = _robust_json_parse(raw)
         component = AngularComponent(
-            component_name=data["component_name"],
-            typescript_code=data["typescript_code"],
-            html_template=data["html_template"],
-            scss_styles=data["scss_styles"],
+            component_name=data.get("component_name", fallback_name),
+            typescript_code=data.get("typescript_code", ""),
+            html_template=data.get("html_template", ""),
+            scss_styles=data.get("scss_styles", ""),
             retry_count=attempt,
         )
-    except (json.JSONDecodeError, KeyError) as exc:
-        # Surface parse errors as validation errors so the loop can recover
-        print(f"[generator] ⚠️  LLM output was not valid JSON: {exc}")
+        if not data.get("typescript_code") or not data.get("html_template"):
+            raise KeyError("JSON missing required code fields")
+            
+    except (json.JSONDecodeError, KeyError, Exception) as exc:
+        print(f"[generator] ⚠️  LLM output was not valid JSON or missing keys: {exc}")
         component = AngularComponent(
-            component_name="ErrorComponent",
+            component_name=fallback_name,
             typescript_code="",
             html_template="",
             scss_styles="",
             validation_errors=[
-                f"LLM output was not valid JSON: {exc}. "
-                f"Raw output (first 300 chars): {raw[:300]}"
+                f"JSON Error: {str(exc)}. Focus on providing ONLY a JSON object with keys: "
+                "component_name, typescript_code, html_template, scss_styles."
             ],
             retry_count=attempt,
         )
