@@ -1,0 +1,35 @@
+{
+    "tokens": {
+        "primary-color": "#6366f1",
+        "primary-hover": "#4f46e5",
+        "secondary-color": "#f1f5f9",
+        "accent-color": "#06b6d4",
+        "error-color": "#ef4444",
+        "success-color": "#22c55e",
+        "background": "#0f172a",
+        "surface": "#1e293b",
+        "text-primary": "#f8fafc",
+        "text-secondary": "#94a3b8",
+        "border-radius": "8px",
+        "border-radius-lg": "16px",
+        "font-family": "Inter, sans-serif",
+        "font-size-base": "16px",
+        "spacing-unit": "8px",
+        "shadow": "0 8px 32px rgba(0,0,0,0.3)"
+    },
+    "tailwind_classes": {
+        "primary-bg": "bg-[#6366f1]",
+        "primary-hover": "hover:bg-[#4f46e5]",
+        "accent-bg": "bg-[#06b6d4]",
+        "error-bg": "bg-[#ef4444]",
+        "success-bg": "bg-[#22c55e]",
+        "app-background": "bg-[#0f172a]",
+        "surface": "bg-[#1e293b]",
+        "text-primary": "text-[#f8fafc]",
+        "text-secondary": "text-[#94a3b8]",
+        "rounded": "rounded-[8px]",
+        "rounded-lg": "rounded-[16px]",
+        "font": "font-['Inter']",
+        "shadow": "shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+    }
+}
